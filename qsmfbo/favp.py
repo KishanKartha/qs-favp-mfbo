@@ -54,9 +54,9 @@ from .core import (
 )
 
 
-# =============================================================================
+# ++++++++++++++++++
 # Outlier Injection Wrapper
-# =============================================================================
+# ++++++++++++++++++
 
 class OutlierInjector:
     """Wraps a test function and injects catastrophic outliers.
@@ -132,9 +132,9 @@ class OutlierInjector:
         self.total_evals = 0
 
 
-# =============================================================================
+# ++++++++++++++++++
 # True-Regret Helper
-# =============================================================================
+# ++++++++++++++++++
 
 def compute_true_regret(observations, test_function_class, optimal_value):
     """Regret computed against the clean (noiseless, no-outlier) function.
@@ -165,9 +165,9 @@ def compute_true_regret(observations, test_function_class, optimal_value):
     return optimal_value - best_true_y
 
 
-# =============================================================================
+# ++++++++++++++++++
 # FAVP Anomaly Event
-# =============================================================================
+# ++++++++++++++++++
 
 @dataclass
 class AnomalyEvent:
@@ -190,9 +190,9 @@ class AnomalyEvent:
     was_real_outlier: bool = False
 
 
-# =============================================================================
+# ++++++++++++++++++
 # QS-MFBO + FAVP
-# =============================================================================
+# ++++++++++++++++++
 
 class QueueSchedulerFAVP(QueueScheduler):
     """QueueScheduler extended with the FAVP verification protocol.
@@ -358,9 +358,9 @@ class QueueSchedulerFAVP(QueueScheduler):
         return self._make_log('execute_batch', batch_size=bs, cost=bc)
 
 
-# =============================================================================
+# ++++++++++++++++++
 # QS-MFBO + Naive Rejection (ablation baseline)
-# =============================================================================
+# ++++++++++++++++++
 
 class QueueSchedulerNaive(QueueScheduler):
     """Ablation: discard any observation with z > tau without verification.
@@ -520,9 +520,9 @@ class QueueSchedulerNaive(QueueScheduler):
         return self._make_log('execute_batch', batch_size=bs, cost=bc)
 
 
-# =============================================================================
+# ++++++++++++++++++
 # Benchmark Runner
-# =============================================================================
+# ++++++++++++++++++
 
 def run_favp_benchmark(test_function_class, budget=200.0, lambda_cheap=1.0,
                        lambda_overhead=25.0, lambda_marginal=2.0, noise_std=0.1,
@@ -652,9 +652,9 @@ def run_favp_benchmark(test_function_class, budget=200.0, lambda_cheap=1.0,
     return results, diagnostics
 
 
-# =============================================================================
+# ++++++++++++++++++
 # Summary
-# =============================================================================
+# ++++++++++++++++++
 
 def print_summary(results, diagnostics, test_name=""):
     """Print a per-method summary using true regret (not observed regret)."""
@@ -701,9 +701,9 @@ def print_summary(results, diagnostics, test_name=""):
             print("  Outliers corrupted surrogate: %.1f avg" % np.mean(n_inj))
 
 
-# =============================================================================
+# ++++++++++++++++++
 # Plotting
-# =============================================================================
+# ++++++++++++++++++
 
 def plot_favp_results(results, diagnostics, title="FAVP Benchmark", save_path=None):
     """Three-panel diagnostic plot: regret vs cost, true regret, facility visits."""
@@ -789,9 +789,9 @@ def plot_favp_results(results, diagnostics, title="FAVP Benchmark", save_path=No
     plt.show()
 
 
-# =============================================================================
+# ++++++++++++++++++
 # CLI
-# =============================================================================
+# ++++++++++++++++++
 
 if __name__ == "__main__":
     import argparse
