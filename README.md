@@ -4,7 +4,7 @@ Code accompanying the paper:
 
 > Kartha, K. and James, A. P. *Cost-aware multi-fidelity scheduling and cross-fidelity anomaly resolution for iterative learning under laboratory constraints.* (2026)
 
-xpensive measurements so the fixed overhead of a shared facility is paid once per batch instead of once per sample. The second is FAVP, a verification protocol that flags anomalous cheap observations, repeats them, and — if the replicate disagrees — promotes the point to the next fidelity for arbitration rather than discarding it. Both mechanisms are base-agnostic. In this repository they sit on top of MF-MES as the acquisition function with a semiparametric latent factor (SLFM) multi-fidelity kernel, which is the combination used for the numbers in the paper. They are evaluated on three synthetic functions and on the P3HT-CNT dataset of Bash et al. (2021). The live laboratory deployment described in the paper used the same decision logic inside a Gradio interface; that part of the code is specific to our lab and is not included here.
+Two ideas are implemented here. The first is queue-scheduling, which batches expensive measurements, so the fixed overhead of a shared facility is paid once per batch instead of once per sample. The second is FAVP, a verification protocol that flags anomalous cheap observations, repeats them, and if the replicate disagrees, promotes the point to the next fidelity for arbitration rather than discarding it. Both mechanisms are base-agnostic. In this repository, they sit on top of MF-MES as the acquisition function with a semiparametric latent factor (SLFM) multi-fidelity kernel, which is the combination used for the numbers in the paper. They are evaluated on three synthetic functions and on the P3HT-CNT dataset of Bash et al. (2021). The live laboratory deployment described in the paper used the same decision logic inside a Gradio interface; that part of the code is specific to our lab and is not included here. 
 
 ## Install
 
@@ -79,7 +79,7 @@ benchmarks/
 
 The package `qsmfbo` contains the general two-fidelity framework. The
 three-fidelity P3HT benchmark is intentionally kept as a separate standalone
-module under `benchmarks/p3ht_cnt/` — it is the same code that produced the
+module under `benchmarks/p3ht_cnt/`  it is the same code that produced the
 numbers in Section 2.2 of the paper, preserved so the results reproduce
 exactly.
 
