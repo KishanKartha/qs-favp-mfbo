@@ -2,9 +2,7 @@
 
 Code accompanying the paper:
 
-> Kartha, K. and James, A. P. *Cost-aware multi-fidelity scheduling and
-> cross-fidelity anomaly resolution for iterative learning under laboratory
-> constraints.* (2026)
+> Kartha, K. and James, A. P. *Cost-aware multi-fidelity scheduling and cross-fidelity anomaly resolution for iterative learning under laboratory constraints.* (2026)
 
 Two ideas are implemented here. The first is a queue-scheduling layer for
 multi-fidelity Bayesian optimisation, which batches expensive measurements
@@ -53,7 +51,7 @@ naive) should already be visible.
 
 All paper numbers come from the scripts in `benchmarks/`. Defaults are set
 to the values used in the paper, so no arguments are needed for a faithful
-reproduction — just time.
+reproduction.
 
 | Paper artefact | Script |
 |---|---|
@@ -114,7 +112,7 @@ tables can be regenerated from a single finished run.
 
 ## Citation
 
-If you use this code, please cite the paper. (The paper is submitted for publication, we will update the repo with the citation details soon)
+If you use this code, please cite the paper. (The paper is submitted for publication. We will update the repo with the citation details soon)
 
 ```
 
