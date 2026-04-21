@@ -79,9 +79,9 @@ RAW_SAMPLES    = 128
 N_CANDIDATES   = 500
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Data Structures
-# =====================================================================
+# ++++++++++++++++++
 
 @dataclass
 class Observation:
@@ -130,9 +130,9 @@ class IterationLog:
     n_sessions: Dict[float, int] = field(default_factory=dict)
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Per-Fidelity Normalizer
-# =====================================================================
+# ++++++++++++++++++
 
 class PerFidelityNormalizer:
     """
@@ -170,9 +170,9 @@ class PerFidelityNormalizer:
         return y_norm * s + m
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Lookup Table
-# =====================================================================
+# ++++++++++++++++++
 
 class P3HTCNTLookupTable:
     COMP_COLS = ['P3HT content (%)', 'D1 content (%)', 'D2 content (%)',
@@ -250,9 +250,9 @@ class P3HTCNTLookupTable:
                   (name, n_valid, n_total, 100*n_valid/n_total))
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Cost Models
-# =====================================================================
+# ++++++++++++++++++
 
 class ThreeFidelityCostModel:
     def __init__(self, lambda_lf=1.0,
@@ -305,9 +305,9 @@ class FixedThreeFidelityCostModel:
         return self.fixed[fidelity]
 
 
-# =====================================================================
+# ++++++++++++++++++
 # GP + MF-MES Utilities
-# =====================================================================
+# ++++++++++++++++++
 
 def build_mf_model(train_X, train_Y):
     model = SingleTaskMultiFidelityGP(
@@ -367,9 +367,9 @@ def evaluate_info_gain(model, x, fidelity):
     return max(ig, 0.0)
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Shared Initialisation
-# =====================================================================
+# ++++++++++++++++++
 
 def generate_shared_init(lookup, n_lf=5, n_mf=3, n_hf=2, seed=0):
     rng = np.random.RandomState(seed)
@@ -409,9 +409,9 @@ def compute_init_cost(cost_model, init_data):
     return c
 
 
-# =====================================================================
+# ++++++++++++++++++
 # QueueScheduler - 3 Fidelity with FAVP (v4: escalation deduplication)
-# =====================================================================
+# ++++++++++++++++++
 
 class QueueScheduler3F:
     def __init__(self, lookup, cost_model, seed=0, init_data=None,
@@ -770,9 +770,9 @@ class QueueScheduler3F:
         return self.log
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Standard MF-MES Baseline
-# =====================================================================
+# ++++++++++++++++++
 
 class StandardMFMES3F:
     def __init__(self, lookup, cost_model, seed=0, init_data=None):
@@ -911,9 +911,9 @@ class StandardMFMES3F:
         return self.log
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Experiment Runner
-# =====================================================================
+# ++++++++++++++++++
 
 def run_p3ht_benchmark(filepath, budget=200.0, n_seeds=10, verbose=True,
                        n_init_lf=5, n_init_mf=3, n_init_hf=2,
@@ -975,9 +975,9 @@ def run_p3ht_benchmark(filepath, budget=200.0, n_seeds=10, verbose=True,
     return results, all_favp, lookup
 
 
-# =====================================================================
+# ++++++++++++++++++
 # Plotting & Summary
-# =====================================================================
+# ++++++++++++++++++
 
 def plot_p3ht_results(results, lookup, budget=200, save_path=None):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
