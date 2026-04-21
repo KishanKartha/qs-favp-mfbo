@@ -16,17 +16,23 @@ Run order is not important — the four experiments are independent.
 
 ## Invocation
 
-From the repository root:
+From the repository root, install the package once in editable mode:
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
+```
+
+Then run any of the benchmarks:
+
+```bash
+cd benchmarks/synthetic
 
 # Full runs (default: 10 seeds for the first four, 5 seeds for sensitivity)
-python -m benchmarks.synthetic.run_clean
-python -m benchmarks.synthetic.run_catastrophic
-python -m benchmarks.synthetic.run_ablation
-python -m benchmarks.synthetic.run_overhead_sweep
-python -m benchmarks.synthetic.run_favp_sensitivity
+python run_clean.py
+python run_catastrophic.py
+python run_ablation.py
+python run_overhead_sweep.py
+python run_favp_sensitivity.py
 ```
 
 Each script also accepts `--n_seeds N` for a smaller check and `--no_plot` if
