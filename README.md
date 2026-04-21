@@ -99,10 +99,10 @@ exactly.
 
 Ten-seed runs are not short. Rough wall-clock times on a single RTX 5000:
 
-- clean-condition synthetic benchmark: 3–4 h
-- catastrophic-noise synthetic benchmark: 6–8 h
-- P3HT-CNT three-fidelity benchmark: 4–7 h
-- FAVP sensitivity sweep (200 cells, 5 seeds each): 6–8 h
+- clean-condition synthetic benchmark: 6–8 h
+- catastrophic-noise synthetic benchmark: 12–16 h
+- P3HT-CNT three-fidelity benchmark: 8–14 h
+- FAVP sensitivity sweep (200 cells, 5 seeds each): 12–16 h
 
 On CPU these run roughly an order of magnitude slower. If you want to
 sanity-check a runner without waiting, every script accepts `--n_seeds 2` or
