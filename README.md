@@ -114,16 +114,10 @@ tables can be regenerated from a single finished run.
 
 ## Citation
 
-If you use this code, please cite the paper:
+If you use this code, please cite the paper. (The paper is submitted for publication, we will update the repo with the citation details soon)
 
 ```
-@article{kartha2026favp,
-  title   = {Cost-aware multi-fidelity scheduling and cross-fidelity
-             anomaly resolution for iterative learning under laboratory
-             constraints},
-  author  = {Kartha, Kishan and James, Alex P.},
-  year    = {2026}
-}
+
 ```
 
 ## Licence
