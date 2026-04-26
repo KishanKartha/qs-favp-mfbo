@@ -6,7 +6,7 @@
 Python 3.9 or newer. From a fresh virtual environment:
 
 ```bash
-git clone https://github.com/KishanKartha/qs-favp-mfbo.git
+git clone <this repo url>
 cd qs-favp-mfbo
 pip install -e .
 ```
