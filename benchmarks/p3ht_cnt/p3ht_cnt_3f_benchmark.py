@@ -1,35 +1,36 @@
 """
-Three-fidelity retrospective benchmark on the P3HT-CNT composite dataset.
+P3HT-CNT Retrospective Benchmark: 3-Fidelity QS-MFBO + FAVP
+============================================================
+Retrospective benchmark on the P3HT-CNT composite dataset
+(Bash et al., Adv. Funct. Mater. 2021, 31, 2102606), used in
+Section 1.2 of the paper.
 
-Reproduces Section 2.2 of the paper and the associated Extended Data figures.
-The dataset is Bash et al. (Adv. Funct. Mater. 2021); obtain the .xlsx from
-the repository linked in this folder's README.md.
+Implements the corrected M-fidelity FAVP from Supplementary Algorithm 2:
+LF FAVP is synchronous (cheap, one-off repeat at marginal cost), and MF
+FAVP is deferred (the repeat is enqueued and rides the next MF batch
+dispatch, with the A1/A2 comparison resolved on arrival via a pending-
+verification register). This preserves cost honesty: an MF repeat
+contributes only the marginal cost of one additional sample in the next
+dispatch, with no additional session overhead.
 
-This module is a standalone parallel implementation to qsmfbo.core:
-  - QueueScheduler3F         three-fidelity QS-MFBO with FAVP
-  - StandardMFMES3F          three-fidelity MF-MES baseline
-  - P3HTCNTLookupTable       replicate-pool oracle over the five-dimensional
-                             composition simplex
-  - ThreeFidelityCostModel   queue-dependent cost with floor constraint
+Implementation notes:
+  - Per-fidelity output normalisation, applied separately at each level
+  - Greedy sequential fantasisation for queue valuation
+  - Escalation deduplication and LF-branch loop-prevention safeguard
+  - Piecewise queue-aware cost utility passed to MF-MES, so the MF queue
+    state actually shapes per-iteration suggestions at MF (Methods Eq. 1)
 
-The three-fidelity specialisation is kept separate from the two-fidelity
-framework in qsmfbo.core so that the published numbers for Section 2.2
-reproduce bit-for-bit from the code that generated them.
+Three-fidelity hierarchy:
+  m = 0 (LF):  log absorption ratio at 602/525 nm   - immediate
+  m = 1 (MF):  log four-point-probe sheet resistance - queued
+  m = 2 (HF):  log conductivity                      - queued (target)
 
-Fidelity mapping used by the paper:
-  m = 0  LF  log absorption ratio 602 nm / 525 nm      cost = 1
-  m = 1  MF  log sheet resistance (sign-inverted)      overhead 1.5, marginal 1.0
-  m = 2  HF  log conductivity                          overhead 3.0, marginal 1.5
-
-FAVP runs with tau = 4.0 on this benchmark (versus tau = 3.0 on the synthetic
-benchmarks) to suppress spurious flags on genuinely noisy replicate draws;
-see Supplementary Note 2 for the rationale.
-
-Reference:
-    Kartha, K. & James, A. P. Cost-aware multi-fidelity scheduling and
-    cross-fidelity anomaly resolution for iterative learning under
-    laboratory constraints. (2026). See Section 2.2.
+Input: 5-dimensional composition simplex (P3HT + 4 CNT types), normalised
+to [0, 1]. 198 compositions with 2-10 replicate droplets each in the
+released dataset (median 5, range 2-10). See Supplementary Note 2.
 """
+
+# !pip install botorch gpytorch openpyxl -q
 
 import torch
 import numpy as np
@@ -49,6 +50,7 @@ from botorch.fit import fit_gpytorch_mll
 from botorch.acquisition.max_value_entropy_search import qMultiFidelityMaxValueEntropy
 from botorch.acquisition.cost_aware import InverseCostWeightedUtility
 from botorch.models.cost import AffineFidelityCostModel
+from botorch.models.deterministic import DeterministicModel
 from botorch.optim.optimize import optimize_acqf_mixed
 from botorch.acquisition.utils import project_to_target_fidelity
 from gpytorch.mlls import ExactMarginalLogLikelihood
@@ -92,8 +94,8 @@ class Observation:
     iteration: int
     comp_idx: int = -1
     batch_id: Optional[int] = None
-    is_favp_repeat: bool = False
-    is_favp_escalation: bool = False
+    is_favop_repeat: bool = False
+    is_favop_escalation: bool = False
 
 @dataclass
 class QueueItem:
@@ -102,9 +104,14 @@ class QueueItem:
     iteration_added: int
     comp_idx: int
     source: str = "acquisition"
+    # v5: verification-repeat marker. When True, this queue item is the
+    # deferred repeat of a previously-flagged observation at the same
+    # fidelity. On dispatch, the A1/A2 comparison is performed against
+    # the value recorded in the scheduler's pending_verifications register.
+    is_verification_repeat: bool = False
 
 @dataclass
-class FAVPEvent:
+class FAVOPEvent:
     iteration: int
     comp_idx: int
     fidelity: float
@@ -112,8 +119,13 @@ class FAVPEvent:
     residual: float
     y_repeat: Optional[float] = None
     repeat_is_nan: bool = False
-    case: Optional[str] = None   # "A1", "A2", "A2_dedup"
+    # case is "A1", "A2", "A2_dedup", or "deferred" while waiting for the
+    # verification repeat to arrive on the next MF batch dispatch.
+    case: Optional[str] = None
     escalated_to: Optional[float] = None
+    # v5: iteration at which the deferred repeat arrived and A1/A2 was
+    # resolved. None for synchronous (LF) events.
+    resolved_iteration: Optional[int] = None
 
 @dataclass
 class IterationLog:
@@ -256,8 +268,8 @@ class P3HTCNTLookupTable:
 
 class ThreeFidelityCostModel:
     def __init__(self, lambda_lf=1.0,
-                 lambda_o_mf=1.5, lambda_mar_mf=1.0,
-                 lambda_o_hf=3.0, lambda_mar_hf=1.5):
+                 lambda_o_mf=6.0, lambda_mar_mf=1.0,
+                 lambda_o_hf=8.0, lambda_mar_hf=1.0):
         self.lambda_lf = lambda_lf
         self.overheads  = {FIDELITY_MF: lambda_o_mf,  FIDELITY_HF: lambda_o_hf}
         self.marginals  = {FIDELITY_MF: max(lambda_mar_mf, lambda_lf),
@@ -281,8 +293,8 @@ class ThreeFidelityCostModel:
 
 class FixedThreeFidelityCostModel:
     def __init__(self, lambda_lf=1.0,
-                 lambda_o_mf=1.5, lambda_mar_mf=1.0,
-                 lambda_o_hf=3.0, lambda_mar_hf=1.5):
+                 lambda_o_mf=6.0, lambda_mar_mf=1.0,
+                 lambda_o_hf=8.0, lambda_mar_hf=1.0):
         self.lambda_lf = lambda_lf
         self.overheads  = {FIDELITY_MF: lambda_o_mf,  FIDELITY_HF: lambda_o_hf}
         self.marginals  = {FIDELITY_MF: max(lambda_mar_mf, lambda_lf),
@@ -323,6 +335,58 @@ def make_cost_utility(cost_lf, cost_hf):
     w = max(cost_hf - cost_lf, 0.01)
     cm = AffineFidelityCostModel(fidelity_weights={FIDELITY_DIM: w},
                                  fixed_cost=cost_lf)
+    return InverseCostWeightedUtility(cost_model=cm)
+
+
+# v5 piecewise cost model -----------------------------------------------------
+# The default ``AffineFidelityCostModel`` linearly interpolates cost between the
+# cheapest and most expensive fidelity. For three fidelities (LF=0.0, MF=0.5,
+# HF=1.0) this means MF cost is ``(c_lf + c_hf)/2``, regardless of the MF queue
+# state. As a result MF-MES never sees the MF queue's amortisation discount in
+# its per-iteration cost weighting, and the MF queue does not grow organically.
+# ``PiecewiseFidelityCostModel`` returns the correct per-fidelity queue-aware
+# cost: ``c_lf`` at fidelity 0.0, ``c_mf(q_mf)`` at fidelity 0.5, and
+# ``c_hf(q_hf)`` at fidelity 1.0. Queue sizes are baked in at construction
+# time; the model is rebuilt each iteration via ``_cost_utility``.
+class PiecewiseFidelityCostModel(DeterministicModel):
+    """Piecewise per-fidelity cost on the three discrete levels (LF, MF, HF).
+
+    Args:
+        cost_lf: cost per LF sample (no queue at LF).
+        cost_mf: queue-aware cost per MF sample, lambda_o_mf/(q_mf+1) + lambda_mar_mf.
+        cost_hf: queue-aware cost per HF sample, lambda_o_hf/(q_hf+1) + lambda_mar_hf.
+
+    Costs are dispatched on the fidelity coordinate via threshold matching
+    (LF: f < 0.25, MF: 0.25 <= f < 0.75, HF: f >= 0.75) so values close to but
+    not exactly 0.0 / 0.5 / 1.0 are handled robustly.
+    """
+
+    def __init__(self, cost_lf: float, cost_mf: float, cost_hf: float):
+        super().__init__()
+        self.register_buffer("c_lf", torch.tensor(float(cost_lf)))
+        self.register_buffer("c_mf", torch.tensor(float(cost_mf)))
+        self.register_buffer("c_hf", torch.tensor(float(cost_hf)))
+        self._num_outputs = 1
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        # X: ``... x q x (d+1)``. Pull the fidelity column.
+        f = X[..., FIDELITY_DIM]
+        c_lf = self.c_lf.to(X)
+        c_mf = self.c_mf.to(X)
+        c_hf = self.c_hf.to(X)
+        # Build the cost tensor by piecewise selection. Default to HF, then
+        # overwrite LF and MF regions.
+        cost = torch.full_like(f, c_hf.item())
+        cost = torch.where(f < 0.25, c_lf, cost)
+        cost = torch.where((f >= 0.25) & (f < 0.75), c_mf, cost)
+        return cost.unsqueeze(-1)
+
+
+def make_piecewise_cost_utility(cost_lf, cost_mf, cost_hf):
+    """Wrap a PiecewiseFidelityCostModel in InverseCostWeightedUtility."""
+    cm = PiecewiseFidelityCostModel(cost_lf=cost_lf,
+                                    cost_mf=cost_mf,
+                                    cost_hf=cost_hf)
     return InverseCostWeightedUtility(cost_model=cm)
 
 
@@ -410,12 +474,12 @@ def compute_init_cost(cost_model, init_data):
 
 
 # =====================================================================
-# QueueScheduler - 3 Fidelity with FAVP (v4: escalation deduplication)
+# QueueScheduler - 3 Fidelity with FAVOP (v4: escalation deduplication)
 # =====================================================================
 
 class QueueScheduler3F:
     def __init__(self, lookup, cost_model, seed=0, init_data=None,
-                 q_min=2, q_max=20, use_favp=True,
+                 q_min=2, q_max=20, use_favop=True,
                  tau=4.0, gamma=1.5, n_min=10):
         self.lookup     = lookup
         self.cost_model = cost_model
@@ -424,7 +488,7 @@ class QueueScheduler3F:
         self.init_data  = init_data
         self.q_min      = q_min
         self.q_max      = q_max
-        self.use_favp  = use_favp
+        self.use_favop  = use_favop
         self.tau        = tau
         self.gamma      = gamma
         self.n_min      = n_min
@@ -432,7 +496,12 @@ class QueueScheduler3F:
         self.observations = []
         self.queues = {FIDELITY_MF: [], FIDELITY_HF: []}
         self.log = []
-        self.favp_events = []
+        self.favop_events = []
+        # v5: pending-verification register V (Supplementary Algorithm 2).
+        # Keyed by (comp_idx, fidelity). Stores the in-flight FAVOPEvent
+        # and the prior observation y-value for A1/A2 resolution when
+        # the deferred repeat arrives on the next batch dispatch.
+        self.pending_verifications = {}
         self.iteration     = 0
         self.cumulative_cost = 0.0
         self.n_sessions    = {FIDELITY_MF: 0, FIDELITY_HF: 0}
@@ -482,10 +551,18 @@ class QueueScheduler3F:
             return False
 
     def _cost_utility(self):
+        # v5 piecewise: pass true per-fidelity queue-aware costs to MF-MES
+        # rather than relying on linear LF<->HF interpolation. The MF cost
+        # now reflects the current MF queue size, which is essential for the
+        # queue-amortisation principle to shape MF-MES's per-iteration
+        # suggestions at MF (without this, MF queues do not grow organically;
+        # see Methods Eq. 1 and the surrounding discussion).
+        q_mf = len(self.queues[FIDELITY_MF])
         q_hf = len(self.queues[FIDELITY_HF])
-        c_lf = self.cost_model.cost_per_sample(0, FIDELITY_LF)
+        c_lf = self.cost_model.cost_per_sample(0,    FIDELITY_LF)
+        c_mf = self.cost_model.cost_per_sample(q_mf, FIDELITY_MF)
         c_hf = self.cost_model.cost_per_sample(q_hf, FIDELITY_HF)
-        return make_cost_utility(c_lf, c_hf)
+        return make_piecewise_cost_utility(c_lf, c_mf, c_hf)
 
     def _greedy_queue_valuation(self, fidelity):
         """
@@ -543,23 +620,47 @@ class QueueScheduler3F:
             return None
         obs = Observation(x=x, fidelity=fidelity, y=val, cost=0.0,
                           iteration=self.iteration, comp_idx=comp_idx,
-                          is_favp_repeat=is_repeat,
-                          is_favp_escalation=is_esc)
+                          is_favop_repeat=is_repeat,
+                          is_favop_escalation=is_esc)
         self.observations.append(obs)
         return obs
 
-    def _favp(self, obs):
+    def _favop(self, obs):
         """
-        FAVP with escalation deduplication.
+        FAVP (Fidelity-Aware Verification Protocol), general M-fidelity form.
 
-        If an anomaly triggers an escalation to a higher fidelity, but the
-        composition is already queued at that fidelity, the escalation is
-        suppressed (case="A2_dedup"). The original and repeat observations
-        are still kept in the GP, but no redundant queue entry is created.
+        Follows Supplementary Algorithm 2 (general M-fidelity case):
+
+          Case (i) -- obs is a deferred verification repeat that has just
+                      arrived on a batch dispatch:
+            handled separately by _resolve_deferred_favop; this routine
+            does not reach that branch because _exec_batch intercepts
+            verification-repeat QueueItems before calling _favop.
+
+          Case (ii) -- obs is a fresh measurement:
+            - Compute residual r = |y - mu(x,m)| / sigma(x,m).
+            - If r <= tau, accept and return (normal observation).
+            - If r > tau, flag. Scheduling of the repeat depends on m:
+                * If m is the cheapest (non-queued) fidelity -> LF here:
+                  repeat immediately as a one-off measurement bearing only
+                  the marginal cost; resolve A1/A2 inline.
+                * If m is a queued intermediate fidelity -> MF here:
+                  enqueue the repeat at Q^(m) (shares next dispatch's
+                  session overhead, contributes only marginal cost), and
+                  register the event in V for resolution on arrival.
+
+        Escalation deduplication (retained from v4): if the next fidelity
+        already contains this composition in its queue, the A2 path logs
+        case="A2_dedup" instead of adding a redundant queue entry.
         """
-        if not self.use_favp or obs.fidelity == FIDELITY_HF:
+        if not self.use_favop or obs.fidelity == FIDELITY_HF:
             return
         if len(self.observations) < self.n_min:
+            return
+        # Guard: if this observation is itself a FAVP repeat, don't
+        # re-flag it. Verification-repeat resolution happens via
+        # _resolve_deferred_favop, which is dispatched by _exec_batch.
+        if obs.is_favop_repeat:
             return
 
         xf = torch.cat([obs.x, torch.tensor([obs.fidelity])]).unsqueeze(0)
@@ -575,65 +676,182 @@ class QueueScheduler3F:
         if r <= self.tau:
             return
 
-        ev = FAVPEvent(iteration=self.iteration, comp_idx=obs.comp_idx,
+        ev = FAVOPEvent(iteration=self.iteration, comp_idx=obs.comp_idx,
                         fidelity=obs.fidelity, y_original=obs.y, residual=r)
-
-        rep_cost = self.cost_model.cost_per_sample(0, obs.fidelity)
-        self.cumulative_cost += rep_cost
-
-        rep = self._measure(obs.comp_idx, obs.fidelity, is_repeat=True)
 
         next_fid = FIDELITY_MF if obs.fidelity == FIDELITY_LF else FIDELITY_HF
 
-        if rep is None:
-            # Repeat was NaN - treat as contradicting, try to escalate
-            ev.repeat_is_nan = True
-            if self._already_queued(obs.comp_idx, next_fid):
-                ev.case = "A2_dedup"
-            else:
-                ev.case = "A2"
-                ev.escalated_to = next_fid
-                x = self.lookup.get_composition_tensor(obs.comp_idx)
-                self.queues[next_fid].append(QueueItem(
-                    x=x, fidelity=next_fid, iteration_added=self.iteration,
-                    comp_idx=obs.comp_idx, source="favp_escalation"))
-        else:
-            ev.y_repeat = rep.y
-            delta = abs(rep.y - obs.y)
-            # Consistency threshold in raw space: scale sigma_norm back
-            _, s = self.normalizer.stats.get(obs.fidelity, (0, 1))
-            epsilon = self.gamma * sigma_norm * s
-            if delta <= epsilon:
-                ev.case = "A1"  # genuine extreme, both kept
-            else:
+        # Branch on fidelity: LF -> synchronous, MF -> deferred.
+        if obs.fidelity == FIDELITY_LF:
+            # Cheapest fidelity: one-off repeat at marginal cost, resolve now.
+            rep_cost = self.cost_model.cost_per_sample(0, obs.fidelity)
+            self.cumulative_cost += rep_cost
+            rep = self._measure(obs.comp_idx, obs.fidelity, is_repeat=True)
+
+            if rep is None:
+                ev.repeat_is_nan = True
                 if self._already_queued(obs.comp_idx, next_fid):
-                    ev.case = "A2_dedup"  # contradicting but already queued
+                    ev.case = "A2_dedup"
                 else:
                     ev.case = "A2"
                     ev.escalated_to = next_fid
                     x = self.lookup.get_composition_tensor(obs.comp_idx)
                     self.queues[next_fid].append(QueueItem(
-                        x=x, fidelity=next_fid, iteration_added=self.iteration,
-                        comp_idx=obs.comp_idx, source="favp_escalation"))
+                        x=x, fidelity=next_fid,
+                        iteration_added=self.iteration,
+                        comp_idx=obs.comp_idx, source="favop_escalation"))
+            else:
+                ev.y_repeat = rep.y
+                delta = abs(rep.y - obs.y)
+                _, s = self.normalizer.stats.get(obs.fidelity, (0, 1))
+                epsilon = self.gamma * sigma_norm * s
+                if delta <= epsilon:
+                    ev.case = "A1"
+                else:
+                    if self._already_queued(obs.comp_idx, next_fid):
+                        ev.case = "A2_dedup"
+                    else:
+                        ev.case = "A2"
+                        ev.escalated_to = next_fid
+                        x = self.lookup.get_composition_tensor(obs.comp_idx)
+                        self.queues[next_fid].append(QueueItem(
+                            x=x, fidelity=next_fid,
+                            iteration_added=self.iteration,
+                            comp_idx=obs.comp_idx,
+                            source="favop_escalation"))
 
-        self.favp_events.append(ev)
+            ev.resolved_iteration = self.iteration
+            self.favop_events.append(ev)
+            return
+
+        # obs.fidelity == FIDELITY_MF: queued intermediate fidelity.
+        # Defer the repeat to the next MF dispatch (Supplementary Alg. 2,
+        # lines 33-35). Register in V for A1/A2 resolution on arrival.
+        key = (obs.comp_idx, obs.fidelity)
+        if key in self.pending_verifications:
+            # Already waiting for a repeat at this (comp, fid); log but do
+            # not enqueue a second time.
+            ev.case = "deferred_dedup"
+            self.favop_events.append(ev)
+            return
+
+        ev.case = "deferred"
+        self.pending_verifications[key] = {
+            'event': ev,
+            'y_prior': obs.y,
+            'sigma_norm_at_flag': sigma_norm,
+        }
+        x = self.lookup.get_composition_tensor(obs.comp_idx)
+        self.queues[obs.fidelity].append(QueueItem(
+            x=x, fidelity=obs.fidelity,
+            iteration_added=self.iteration,
+            comp_idx=obs.comp_idx,
+            source="favop_verification_repeat",
+            is_verification_repeat=True))
+        self.favop_events.append(ev)
+
+    def _resolve_deferred_favop(self, comp_idx, fidelity, y_arrived):
+        """
+        Resolve a deferred FAVP verification on repeat arrival
+        (Supplementary Algorithm 2, Case (i)).
+
+        Performs the A1/A2 comparison:
+            delta = |y_arrived - y_prior|
+            epsilon = gamma * sigma(x, m)   (evaluated at flag time)
+            delta <= epsilon  -> A1: genuine extreme, both kept, no action
+            delta  > epsilon  -> A2: escalate to next fidelity (with dedup)
+
+        Called from _exec_batch for queue items whose is_verification_repeat
+        flag is set. The repeat observation itself is already accepted into
+        self.observations; this routine only updates the pending FAVOPEvent
+        and may add an escalation to the next higher-fidelity queue.
+        """
+        key = (comp_idx, fidelity)
+        pending = self.pending_verifications.pop(key, None)
+        if pending is None:
+            return
+
+        ev = pending['event']
+        y_prior = pending['y_prior']
+        sigma_norm = pending['sigma_norm_at_flag']
+
+        ev.y_repeat = y_arrived
+        ev.resolved_iteration = self.iteration
+
+        if y_arrived is None:
+            # Repeat was NaN: treat as contradicting, try to escalate
+            ev.repeat_is_nan = True
+            next_fid = FIDELITY_MF if fidelity == FIDELITY_LF else FIDELITY_HF
+            if self._already_queued(comp_idx, next_fid):
+                ev.case = "A2_dedup"
+            else:
+                ev.case = "A2"
+                ev.escalated_to = next_fid
+                x = self.lookup.get_composition_tensor(comp_idx)
+                self.queues[next_fid].append(QueueItem(
+                    x=x, fidelity=next_fid,
+                    iteration_added=self.iteration,
+                    comp_idx=comp_idx, source="favop_escalation"))
+            return
+
+        delta = abs(y_arrived - y_prior)
+        _, s = self.normalizer.stats.get(fidelity, (0, 1))
+        epsilon = self.gamma * sigma_norm * s
+
+        next_fid = FIDELITY_MF if fidelity == FIDELITY_LF else FIDELITY_HF
+        if delta <= epsilon:
+            ev.case = "A1"
+        else:
+            if self._already_queued(comp_idx, next_fid):
+                ev.case = "A2_dedup"
+            else:
+                ev.case = "A2"
+                ev.escalated_to = next_fid
+                x = self.lookup.get_composition_tensor(comp_idx)
+                self.queues[next_fid].append(QueueItem(
+                    x=x, fidelity=next_fid,
+                    iteration_added=self.iteration,
+                    comp_idx=comp_idx, source="favop_escalation"))
 
     def _exec_batch(self, fidelity):
         queue = self.queues[fidelity]
-        q  = len(queue)
+        # Snapshot the items to dispatch NOW. Items added during this
+        # iteration (e.g. a FAVP verification-repeat enqueued in response
+        # to a flag on a fresh observation in the same batch) remain in
+        # the queue for the NEXT dispatch, preserving the "defer to next
+        # MF dispatch" semantic of Supplementary Algorithm 2.
+        to_dispatch = list(queue)
+        q  = len(to_dispatch)
         bc = self.cost_model.batch_cost(q, fidelity)
         self.cumulative_cost += bc
         self.batch_counter   += 1
         self.n_sessions[fidelity] += 1
 
-        for item in queue:
-            obs = self._measure(item.comp_idx, fidelity)
-            if obs is not None:
-                obs.batch_id = self.batch_counter
-                if fidelity == FIDELITY_MF:
-                    self._favp(obs)
+        for item in to_dispatch:
+            obs = self._measure(item.comp_idx, fidelity,
+                                is_repeat=item.is_verification_repeat)
+            if item.is_verification_repeat:
+                # Deferred FAVP repeat has arrived (Supplementary Alg. 2,
+                # Case (i)). Resolve A1/A2 from the pending register V.
+                # The observation itself is already in self.observations;
+                # mark its batch_id and route through the resolver.
+                y_arrived = obs.y if obs is not None else None
+                if obs is not None:
+                    obs.batch_id = self.batch_counter
+                self._resolve_deferred_favop(item.comp_idx, fidelity, y_arrived)
+            else:
+                # Fresh batch measurement. Flag via FAVP if applicable.
+                if obs is not None:
+                    obs.batch_id = self.batch_counter
+                    if fidelity == FIDELITY_MF:
+                        self._favop(obs)
 
-        queue.clear()
+        # Remove only the items we dispatched; anything added by FAVP
+        # during this batch stays for the next dispatch.
+        dispatched_ids = {id(it) for it in to_dispatch}
+        self.queues[fidelity] = [
+            it for it in self.queues[fidelity] if id(it) not in dispatched_ids
+        ]
         return self._make_log('batch_' + FIDELITY_NAMES[fidelity],
                               fidelity=fidelity, cost=bc, bs=q)
 
@@ -728,7 +946,7 @@ class QueueScheduler3F:
         self.cumulative_cost += self.cost_model.lambda_lf
         obs = self._measure(comp_idx, FIDELITY_LF)
         if obs is not None:
-            self._favp(obs)
+            self._favop(obs)
         return self._make_log('exec_LF', FIDELITY_LF, comp_idx,
                               self.cost_model.lambda_lf)
 
@@ -738,7 +956,7 @@ class QueueScheduler3F:
         return optimize_mfmes(acqf, self._pending_X())
 
     def run(self, budget, verbose=True):
-        label = "QS-MFBO+FAVP" if self.use_favp else "QS-MFBO"
+        label = "QS-MFBO+FAVOP" if self.use_favop else "QS-MFBO"
         if verbose:
             print("\n%s | Budget=%s | Seed=%d" % (label, str(budget), self.seed))
         self._do_init()
@@ -755,18 +973,26 @@ class QueueScheduler3F:
                       (self.iteration, entry.action, qs.get(0.5, 0), qs.get(1.0, 0),
                        self.cumulative_cost, str(int(budget)), entry.true_regret))
 
-        for fid in QUEUED_FIDELITIES:
-            if self.queues[fid]:
-                if verbose:
-                    print("  Flush %s queue (%d items)" %
-                          (FIDELITY_NAMES[fid], len(self.queues[fid])))
-                self.log.append(self._exec_batch(fid))
+        # Flush any remaining queue items. FAVP may enqueue verification
+        # repeats during dispatch, so iterate until all queues are empty.
+        max_flush_rounds = 10
+        for _ in range(max_flush_rounds):
+            any_dispatched = False
+            for fid in QUEUED_FIDELITIES:
+                if self.queues[fid]:
+                    if verbose:
+                        print("  Flush %s queue (%d items)" %
+                              (FIDELITY_NAMES[fid], len(self.queues[fid])))
+                    self.log.append(self._exec_batch(fid))
+                    any_dispatched = True
+            if not any_dispatched:
+                break
 
         if verbose:
-            print("  DONE | C:%.1f R:%.4f Sess MF:%d HF:%d FAVP:%d" %
+            print("  DONE | C:%.1f R:%.4f Sess MF:%d HF:%d FAVOP:%d" %
                   (self.cumulative_cost, self._regret(),
                    self.n_sessions[FIDELITY_MF], self.n_sessions[FIDELITY_HF],
-                   len(self.favp_events)))
+                   len(self.favop_events)))
         return self.log
 
 
@@ -915,20 +1141,20 @@ class StandardMFMES3F:
 # Experiment Runner
 # =====================================================================
 
-def run_p3ht_benchmark(filepath, budget=200.0, n_seeds=10, verbose=True,
+def run_p3ht_benchmark(filepath, budget=250.0, n_seeds=10, verbose=True,
                        n_init_lf=5, n_init_mf=3, n_init_hf=2,
                        save_checkpoint=None):
     """
     Run the P3HT-CNT benchmark comparing:
-      1. QS-MFBO + FAVP (full framework, full greedy valuation, tau=4, dedup)
-      2. QS-MFBO         (scheduling only, no FAVP)
-      3. MF-MES          (no scheduling, no FAVP)
+      1. QS-MFBO + FAVOP (full framework, full greedy valuation, tau=4, dedup)
+      2. QS-MFBO         (scheduling only, no FAVOP)
+      3. MF-MES          (no scheduling, no FAVOP)
     """
     lookup = P3HTCNTLookupTable(filepath)
     lookup.print_info()
 
-    results = {'QS-MFBO+FAVP': [], 'QS-MFBO': [], 'MF-MES': []}
-    all_favp = []
+    results = {'QS-MFBO+FAVOP': [], 'QS-MFBO': [], 'MF-MES': []}
+    all_favop = []
 
     for seed in range(n_seeds):
         t0 = time.time()
@@ -944,12 +1170,12 @@ def run_p3ht_benchmark(filepath, budget=200.0, n_seeds=10, verbose=True,
         fc = FixedThreeFidelityCostModel()
 
         r1 = QueueScheduler3F(lookup, qc, seed=seed,
-                              init_data=init_data, use_favp=True, tau=4.0)
-        results['QS-MFBO+FAVP'].append(r1.run(budget, verbose))
-        all_favp.append(r1.favp_events)
+                              init_data=init_data, use_favop=True, tau=4.0)
+        results['QS-MFBO+FAVOP'].append(r1.run(budget, verbose))
+        all_favop.append(r1.favop_events)
 
         r2 = QueueScheduler3F(lookup, qc, seed=seed,
-                              init_data=init_data, use_favp=False, tau=4.0)
+                              init_data=init_data, use_favop=False, tau=4.0)
         results['QS-MFBO'].append(r2.run(budget, verbose))
 
         r3 = StandardMFMES3F(lookup, fc, seed=seed, init_data=init_data)
@@ -963,7 +1189,7 @@ def run_p3ht_benchmark(filepath, budget=200.0, n_seeds=10, verbose=True,
                 with open(save_checkpoint, 'wb') as f:
                     pickle.dump({
                         'results': results,
-                        'favp': all_favp,
+                        'favop': all_favop,
                         'seeds_completed': seed + 1,
                         'budget': budget,
                     }, f)
@@ -972,19 +1198,19 @@ def run_p3ht_benchmark(filepath, budget=200.0, n_seeds=10, verbose=True,
             except Exception as e:
                 print("  [WARN] Checkpoint save failed: %s" % e)
 
-    return results, all_favp, lookup
+    return results, all_favop, lookup
 
 
 # =====================================================================
 # Plotting & Summary
 # =====================================================================
 
-def plot_p3ht_results(results, lookup, budget=200, save_path=None):
+def plot_p3ht_results(results, lookup, budget=250, save_path=None):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-    colors = {'QS-MFBO+FAVP': '#e74c3c', 'QS-MFBO': '#2ecc71',
+    colors = {'QS-MFBO+FAVOP': '#e74c3c', 'QS-MFBO': '#2ecc71',
               'MF-MES': '#3498db'}
-    ls     = {'QS-MFBO+FAVP': '-', 'QS-MFBO': '--', 'MF-MES': ':'}
-    lw     = {'QS-MFBO+FAVP': 2.5, 'QS-MFBO': 2.0, 'MF-MES': 1.5}
+    ls     = {'QS-MFBO+FAVOP': '-', 'QS-MFBO': '--', 'MF-MES': ':'}
+    lw     = {'QS-MFBO+FAVOP': 2.5, 'QS-MFBO': 2.0, 'MF-MES': 1.5}
 
     ax = axes[0]
     for method, logs_list in results.items():
@@ -1065,10 +1291,10 @@ def print_summary(results, lookup):
     print("="*75)
 
 
-def print_favp_events(all_favp):
-    total = sum(len(e) for e in all_favp)
-    print("\nFAVP events across all seeds: %d" % total)
-    for si, events in enumerate(all_favp):
+def print_favop_events(all_favop):
+    total = sum(len(e) for e in all_favop)
+    print("\nFAVOP events across all seeds: %d" % total)
+    for si, events in enumerate(all_favop):
         if events:
             a1  = sum(1 for e in events if e.case == "A1")
             a2  = sum(1 for e in events if e.case == "A2")
