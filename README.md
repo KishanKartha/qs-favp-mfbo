@@ -12,7 +12,7 @@ is paid once per batch instead of once per sample. The second is FAVP, a
 verification protocol that flags anomalous cheap observations, repeats
 them, and if the replicate disagrees, promotes the point to the next
 fidelity for arbitration rather than discarding it. Neither mechanism is
-tied to a specific acquisition function or kernel — any multi-fidelity
+tied to a specific acquisition function or kernel, any multi-fidelity
 optimiser that accepts a per-evaluation cost can plug in. In this
 repository they sit on top of MF-MES as the acquisition function with a
 semiparametric latent factor (SLFM) multi-fidelity kernel, which is the
@@ -57,7 +57,7 @@ naive) should already be visible.
 
 All paper numbers come from the scripts in `benchmarks/`. Defaults are set
 to the values used in the paper, so no arguments are needed for a faithful
-reproduction — just time.
+reproduction.
 
 | Paper artefact | Script |
 |---|---|
@@ -95,7 +95,7 @@ benchmarks/
 
 The package `qsmfbo` contains the general two-fidelity framework. The
 three-fidelity P3HT benchmark is intentionally kept as a separate standalone
-module under `benchmarks/p3ht_cnt/` — it is the same code that produced the
+module under `benchmarks/p3ht_cnt/`  it is the same code that produced the
 numbers in Section 2.2 of the paper, preserved so the results reproduce
 exactly.
 
@@ -118,17 +118,8 @@ tables can be regenerated from a single finished run.
 
 ## Citation
 
-If you use this code, please cite the paper:
+If you use this code, please cite the repo and paper:
 
-```
-@article{kartha2026favp,
-  title   = {Cost-aware multi-fidelity scheduling and cross-fidelity
-             anomaly resolution for iterative learning under laboratory
-             constraints},
-  author  = {Kartha, Kishan and James, Alex P.},
-  year    = {2026}
-}
-```
 
 ## Licence
 
