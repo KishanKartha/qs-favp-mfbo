@@ -1,6 +1,6 @@
 # P3HT-CNT three-fidelity benchmark
 
-Retrospective benchmark on the P3HT-CNT composite dataset of Bash et al. (*Adv. Funct. Mater.* **31**, 2102606 (2021)), corresponding to Section 1.2
+Retrospective benchmark on the P3HT-CNT composite dataset of Bash et al.
 of the paper. Reproduces three methods on real noisy three-fidelity data: the full framework (QS-MFBO + FAVP), scheduling alone (QS-MFBO without
 FAVP), and the unaugmented MF-MES baseline.
 

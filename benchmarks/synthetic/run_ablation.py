@@ -1,28 +1,6 @@
 """
 Ablation of QS-MFBO components on Styblinski-Tang 2D.
 
-Reproduces:
-  - Supplementary Note 4, Supplementary Table 1
-
-Compares five variants at the operating point (lambda_o = 25, lambda_m = 2,
-budget 200, 10 seeds):
-
-  MFBO (baseline)        fixed cost, immediate execution
-  QS-MFBO (-both)        queue without queue-dependent cost and without
-                         adaptive trigger (fixed threshold = 3 queued items)
-  QS-MFBO (-cost)        queue with adaptive trigger but fixed cost
-  QS-MFBO (-trigger)     queue-dependent cost but fixed-threshold trigger
-  QS-MFBO (full)         both mechanisms active
-
-All five share initialisation within each seed.
-
-Usage:
-    python run_ablation.py
-    python run_ablation.py --n_seeds 3   # quick smoke test
-
-Output:
-    results/ablation_st2d.pkl
-    results/ablation_summary.txt
 """
 
 import argparse

@@ -1,29 +1,6 @@
 """
 Catastrophic-noise synthetic benchmark (20% outlier injection).
 
-Reproduces:
-  - Fig. 2 (main text, Section 2.1)            convergence under outlier injection
-  - Extended Data Table 1                      final true regret, mean +/- s.d.
-
-Compares four methods: QS-MFBO + FAVP (full framework), QS-MFBO without FAVP,
-QS-MFBO with naive rejection (z > tau discarded without verification), and the
-MF-MES baseline. All four share initialisation within each seed. Regret is
-reported using the clean function (compute_true_regret) so that corrupted
-observations cannot produce fake-good numbers.
-
-Default settings match the paper:
-  budget = 200, overhead = 25, marginal = 2, noise = 0.1,
-  p_outlier = 0.20, tau = 3.0, gamma = 1.5, N_min = 15, seeds = 10
-
-Usage:
-    python run_catastrophic.py              # run all three functions
-    python run_catastrophic.py --function h6d
-    python run_catastrophic.py --n_seeds 3  # quick smoke test
-
-Output:
-    results/favp_<fn>.pkl     per-function results and diagnostics
-    results/favp_<fn>.png     three-panel plot
-    results/favp_summary.txt  combined table
 """
 
 import argparse

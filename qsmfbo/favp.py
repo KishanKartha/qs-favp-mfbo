@@ -2,31 +2,19 @@
 Fidelity-Aware Verification Protocol (FAVP) and the catastrophic-noise
 synthetic benchmark.
 
-This module provides the verification layer that sits on top of the
-QS-MFBO framework defined in qsmfbo.core. It contains:
+This module adds the verification layer on top of the QS-MFBO core
+defined in qsmfbo.core. It contains:
 
-  - OutlierInjector         wraps a test function with probabilistic
-                            catastrophic outliers at the cheap fidelity
-  - AnomalyEvent            record of a single FAVP verification episode
-  - QueueSchedulerFAVP      QueueScheduler extended with Algorithm 2
-                            (detect - repeat - resolve)
-  - QueueSchedulerNaive     ablation baseline that rejects any z > tau
-                            observation without verification
-  - compute_true_regret     regret computed against the clean function,
-                            so corrupted observations cannot produce
-                            fake-good numbers
-  - run_favp_benchmark      four-method benchmark used for Fig. 2 and
-                            Extended Data Table 1 in the paper
+  - OutlierInjector - wraps a test function so that cheap-fidelity evaluations occasionally return catastrophic outliers
+  - AnomalyEventone - record per FAVP verification episode
+  - QueueSchedulerFAVP - QueueScheduler with Algorithm 2 layered on top (flag, repeat, resolve)
+  - QueueSchedulerNaive - ablation: rejects anything with z > tau outright, without verifying
+  - compute_true_regret - regret against the clean function, so a corrupted observation cannot accidentally look like a great result
+  - run_favp_benchmark - runs all four methods in one go
 
-All four methods share initialisation within a seed. The runner returns
-both the per-seed logs and the diagnostics dict (FAVP event lists,
-injection counts, naive-rejection counts) needed for the supplementary
-tables.
+All four methods share the same initialisation within a seed. The runner returns the per-seed logs along with a diagnostics dict that
+carries the FAVP event lists, injection counts, and naive-rejection counts used to build the supplementary tables.
 
-Reference:
-    Kartha, K. & James, A. P. Cost-aware multi-fidelity scheduling and
-    cross-fidelity anomaly resolution for iterative learning under
-    laboratory constraints. (2026). See Section 2.1, Algorithm 2.
 """
 
 import copy
@@ -59,14 +47,10 @@ from .core import (
 # ++++++++++++++++++
 
 class OutlierInjector:
-    """Wraps a test function and injects catastrophic outliers.
-
-    With probability p_outlier, replaces the true observation at the cheap
-    fidelity with a uniform random draw over the function's output range.
-    The expensive fidelity is treated as ground truth and is not corrupted.
-
-    Provides get_true_function() to access the underlying clean function
-    for regret computation (see compute_true_regret below).
+    """Wraps a test function and randomly corrupts the cheap fidelity.
+    Every cheap call has a p_outlier chance of returning a uniform random value from the function's output range instead of the real observation.
+    The expensive fidelity is left alone -- we treat it as ground truth. get_true_function() hands back the underlying clean function for use
+    in regret computation (see compute_true_regret below).
     """
     def __init__(self, test_function, p_outlier=0.08, seed=0):
         self.test_fn = test_function
@@ -96,10 +80,8 @@ class OutlierInjector:
     def evaluate(self, x_norm, fidelity, noise_std=0.0):
         """Evaluate with possible outlier injection at the cheap fidelity only.
 
-        The highest fidelity is ground truth by definition; outliers are only
-        injected into cheap measurements. This matches the FAVP design:
-        anomalies at cheap fidelity get escalated to HF precisely because HF
-        is the definitive measurement.
+        The highest fidelity is ground truth by definition; outliers are only injected into cheap measurements. This matches the FAVP design:
+        anomalies at cheap fidelity get escalated to HF precisely because HF is the definitive measurement.
         """
         self.total_evals += 1
         y_true = self.test_fn.evaluate(x_norm, fidelity, noise_std)
@@ -116,8 +98,7 @@ class OutlierInjector:
         return y_true
 
     def evaluate_clean(self, x_norm, fidelity, noise_std=0.0):
-        """Evaluate without any outlier injection (used for FAVP's repeat step
-        so that a repeat measurement is not itself corrupted; corrupting the
+        """Evaluate without any outlier injection (used for FAVP's repeat step so that a repeat measurement is not itself corrupted; corrupting the
         repeat would conflate FAVP's resolution logic with injection noise)."""
         self.total_evals += 1
         return self.test_fn.evaluate(x_norm, fidelity, noise_std)
@@ -139,8 +120,7 @@ class OutlierInjector:
 def compute_true_regret(observations, test_function_class, optimal_value):
     """Regret computed against the clean (noiseless, no-outlier) function.
 
-    Finds the x that produced the best observed HF value in `observations`,
-    then evaluates the true function at that x to get the actual regret. This
+    Finds the x that produced the best observed HF value in `observations`, then evaluates the true function at that x to get the actual regret. This
     prevents corrupted outliers from producing a fake-good regret number.
     """
     if hasattr(test_function_class, 'get_true_function'):

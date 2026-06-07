@@ -7,16 +7,8 @@ name = "qsmfbo"
 version = "1.0.0"
 description = "Queue-scheduled multi-fidelity Bayesian optimisation with fidelity-aware verification protocol (FAVP)."
 readme = "README.md"
-license = { file = "LICENSE" }
-authors = [
-    { name = "Kishan Kartha", email = "kishan.esres22@duk.ac.in" },
-]
 requires-python = ">=3.9"
-classifiers = [
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Topic :: Scientific/Engineering",
-]
+
 dependencies = [
     "torch>=2.0",
     "botorch>=0.9.0",
@@ -28,8 +20,6 @@ dependencies = [
     "matplotlib>=3.6",
 ]
 
-[project.urls]
-Homepage = "https://github.com/KishanKartha/qs-favp-mfbo"
 
 [tool.setuptools]
 packages = ["qsmfbo"]

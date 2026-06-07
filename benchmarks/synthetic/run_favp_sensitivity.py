@@ -1,33 +1,6 @@
 """
 FAVP threshold sensitivity sweep.
 
-Reproduces:
-  - Supplementary Note 3, Supplementary Figure 1 (regret heatmap)
-  - Supplementary Note 3, Supplementary Figure 2 (A1/A2 event heatmaps)
-
-Sweeps the two FAVP thresholds (tau, gamma) on a 5 x 4 grid with N_min fixed
-at 15 (standard warmup). Only the QS-MFBO + FAVP arm is run per cell; the
-comparative numbers for the other three methods are already reported at the
-operating point by run_catastrophic.py.
-
-Grid:
-  tau   in {2.0, 2.5, 3.0, 3.5, 4.0}   (5 values)
-  gamma in {1.0, 1.5, 2.0, 2.5}        (4 values)
-Functions: Styblinski-Tang 2D, Hartmann 6D  (default)
-Seeds: 5 per cell  (default)
-Total runs: 5 * 4 * 2 * 5 = 200 per default invocation.
-
-Usage:
-    python run_favp_sensitivity.py                        # full sweep
-    python run_favp_sensitivity.py --n_seeds 2            # quick smoke test
-    python run_favp_sensitivity.py --plot_only            # regenerate plots
-                                                            from saved .npz
-
-Output:
-    results/sensitivity/results_sensitivity.npz   raw per-cell, per-seed arrays
-    results/sensitivity/per_seed_regret.csv       Source Data workbook input
-    results/sensitivity/heatmap_regret.pdf        Supplementary Figure 1
-    results/sensitivity/heatmap_events.pdf        Supplementary Figure 2
 """
 
 import os

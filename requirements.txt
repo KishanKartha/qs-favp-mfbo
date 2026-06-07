@@ -1,13 +1,13 @@
-# Core numerical and modelling stack
+
 torch>=2.0
 botorch>=0.9.0
 gpytorch>=1.11
 numpy>=1.23
 scipy>=1.10
 
-# Benchmarks
-pandas>=1.5
-openpyxl>=3.1          # for reading the P3HT-CNT .xlsx dataset
 
-# Plotting (used by the benchmark runners and the sensitivity sweep)
+pandas>=1.5
+openpyxl>=3.1         
+
+
 matplotlib>=3.6

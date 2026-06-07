@@ -1,10 +1,8 @@
 # Synthetic benchmarks
 
-Scripts in this folder reproduce the synthetic-benchmark results in the paper.
-Each script is self-contained and writes its output (pickles, PNGs, text
-summaries) to `results/` by default.
+Scripts in this folder reproduce the synthetic-benchmark results. Each script writes its output to results/ by default.
 
-Run order is not important — the four experiments are independent.
+Run order is not important, the four experiments are independent.
 
 | Script | Reproduces |
 |---|---|
@@ -35,13 +33,11 @@ python run_overhead_sweep.py
 python run_favp_sensitivity.py
 ```
 
-Each script also accepts `--n_seeds N` for a smaller check and `--no_plot` if
-only the numerical output is needed.
+Each script also accepts n_seeds N for a smaller check and no_plot if only the numerical output is needed.
 
 ## Approximate runtime
 
-On a single NVIDIA Quadro RTX 5000 (the machine used to produce the paper's
-numbers), typical wall-clock times are:
+On a single NVIDIA Quadro RTX 5000, typical wall-clock times are:
 
 | Script | Seeds | Runtime |
 |---|---|---|
@@ -51,7 +47,6 @@ numbers), typical wall-clock times are:
 | `run_overhead_sweep.py` | 10 | 3–4 h (5 overhead values) |
 | `run_favp_sensitivity.py` | 5 | 6–8 h (200 cells) |
 
-Runs are substantially slower on CPU.
 
 ## Output layout
 
@@ -77,5 +72,3 @@ results/
     └── heatmap_events.pdf
 ```
 
-Pickle files contain the per-seed logs and diagnostics dictionaries used to
-regenerate figures and tables.

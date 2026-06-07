@@ -2,32 +2,8 @@
 P3HT-CNT Retrospective Benchmark: 3-Fidelity QS-MFBO + FAVP
 ============================================================
 Retrospective benchmark on the P3HT-CNT composite dataset
-(Bash et al., Adv. Funct. Mater. 2021, 31, 2102606), used in
-Section 1.2 of the paper.
 
-Implements the corrected M-fidelity FAVP from Supplementary Algorithm 2:
-LF FAVP is synchronous (cheap, one-off repeat at marginal cost), and MF
-FAVP is deferred (the repeat is enqueued and rides the next MF batch
-dispatch, with the A1/A2 comparison resolved on arrival via a pending-
-verification register). This preserves cost honesty: an MF repeat
-contributes only the marginal cost of one additional sample in the next
-dispatch, with no additional session overhead.
 
-Implementation notes:
-  - Per-fidelity output normalisation, applied separately at each level
-  - Greedy sequential fantasisation for queue valuation
-  - Escalation deduplication and LF-branch loop-prevention safeguard
-  - Piecewise queue-aware cost utility passed to MF-MES, so the MF queue
-    state actually shapes per-iteration suggestions at MF (Methods Eq. 1)
-
-Three-fidelity hierarchy:
-  m = 0 (LF):  log absorption ratio at 602/525 nm   - immediate
-  m = 1 (MF):  log four-point-probe sheet resistance - queued
-  m = 2 (HF):  log conductivity                      - queued (target)
-
-Input: 5-dimensional composition simplex (P3HT + 4 CNT types), normalised
-to [0, 1]. 198 compositions with 2-10 replicate droplets each in the
-released dataset (median 5, range 2-10). See Supplementary Note 2.
 """
 
 # !pip install botorch gpytorch openpyxl -q
@@ -142,9 +118,9 @@ class IterationLog:
     n_sessions: Dict[float, int] = field(default_factory=dict)
 
 
-# =====================================================================
+# ======================================
 # Per-Fidelity Normalizer
-# =====================================================================
+# =================
 
 class PerFidelityNormalizer:
     """
@@ -182,9 +158,9 @@ class PerFidelityNormalizer:
         return y_norm * s + m
 
 
-# =====================================================================
+# ===========================================
 # Lookup Table
-# =====================================================================
+# =========================
 
 class P3HTCNTLookupTable:
     COMP_COLS = ['P3HT content (%)', 'D1 content (%)', 'D2 content (%)',
@@ -262,9 +238,9 @@ class P3HTCNTLookupTable:
                   (name, n_valid, n_total, 100*n_valid/n_total))
 
 
-# =====================================================================
+# ========================
 # Cost Models
-# =====================================================================
+# ==================
 
 class ThreeFidelityCostModel:
     def __init__(self, lambda_lf=1.0,
@@ -319,7 +295,7 @@ class FixedThreeFidelityCostModel:
 
 # =====================================================================
 # GP + MF-MES Utilities
-# =====================================================================
+# ========================================================
 
 def build_mf_model(train_X, train_Y):
     model = SingleTaskMultiFidelityGP(
@@ -338,16 +314,7 @@ def make_cost_utility(cost_lf, cost_hf):
     return InverseCostWeightedUtility(cost_model=cm)
 
 
-# v5 piecewise cost model -----------------------------------------------------
-# The default ``AffineFidelityCostModel`` linearly interpolates cost between the
-# cheapest and most expensive fidelity. For three fidelities (LF=0.0, MF=0.5,
-# HF=1.0) this means MF cost is ``(c_lf + c_hf)/2``, regardless of the MF queue
-# state. As a result MF-MES never sees the MF queue's amortisation discount in
-# its per-iteration cost weighting, and the MF queue does not grow organically.
-# ``PiecewiseFidelityCostModel`` returns the correct per-fidelity queue-aware
-# cost: ``c_lf`` at fidelity 0.0, ``c_mf(q_mf)`` at fidelity 0.5, and
-# ``c_hf(q_hf)`` at fidelity 1.0. Queue sizes are baked in at construction
-# time; the model is rebuilt each iteration via ``_cost_utility``.
+
 class PiecewiseFidelityCostModel(DeterministicModel):
     """Piecewise per-fidelity cost on the three discrete levels (LF, MF, HF).
 
@@ -431,7 +398,7 @@ def evaluate_info_gain(model, x, fidelity):
     return max(ig, 0.0)
 
 
-# =====================================================================
+# =====================================
 # Shared Initialisation
 # =====================================================================
 
@@ -473,9 +440,9 @@ def compute_init_cost(cost_model, init_data):
     return c
 
 
-# =====================================================================
-# QueueScheduler - 3 Fidelity with FAVOP (v4: escalation deduplication)
-# =====================================================================
+# ========================================
+# QueueScheduler - 3 Fidelity with FAVOP 
+# ===============================
 
 class QueueScheduler3F:
     def __init__(self, lookup, cost_model, seed=0, init_data=None,
@@ -497,10 +464,7 @@ class QueueScheduler3F:
         self.queues = {FIDELITY_MF: [], FIDELITY_HF: []}
         self.log = []
         self.favop_events = []
-        # v5: pending-verification register V (Supplementary Algorithm 2).
-        # Keyed by (comp_idx, fidelity). Stores the in-flight FAVOPEvent
-        # and the prior observation y-value for A1/A2 resolution when
-        # the deferred repeat arrives on the next batch dispatch.
+
         self.pending_verifications = {}
         self.iteration     = 0
         self.cumulative_cost = 0.0
@@ -556,7 +520,7 @@ class QueueScheduler3F:
         # now reflects the current MF queue size, which is essential for the
         # queue-amortisation principle to shape MF-MES's per-iteration
         # suggestions at MF (without this, MF queues do not grow organically;
-        # see Methods Eq. 1 and the surrounding discussion).
+
         q_mf = len(self.queues[FIDELITY_MF])
         q_hf = len(self.queues[FIDELITY_HF])
         c_lf = self.cost_model.cost_per_sample(0,    FIDELITY_LF)
@@ -626,33 +590,7 @@ class QueueScheduler3F:
         return obs
 
     def _favop(self, obs):
-        """
-        FAVP (Fidelity-Aware Verification Protocol), general M-fidelity form.
 
-        Follows Supplementary Algorithm 2 (general M-fidelity case):
-
-          Case (i) -- obs is a deferred verification repeat that has just
-                      arrived on a batch dispatch:
-            handled separately by _resolve_deferred_favop; this routine
-            does not reach that branch because _exec_batch intercepts
-            verification-repeat QueueItems before calling _favop.
-
-          Case (ii) -- obs is a fresh measurement:
-            - Compute residual r = |y - mu(x,m)| / sigma(x,m).
-            - If r <= tau, accept and return (normal observation).
-            - If r > tau, flag. Scheduling of the repeat depends on m:
-                * If m is the cheapest (non-queued) fidelity -> LF here:
-                  repeat immediately as a one-off measurement bearing only
-                  the marginal cost; resolve A1/A2 inline.
-                * If m is a queued intermediate fidelity -> MF here:
-                  enqueue the repeat at Q^(m) (shares next dispatch's
-                  session overhead, contributes only marginal cost), and
-                  register the event in V for resolution on arrival.
-
-        Escalation deduplication (retained from v4): if the next fidelity
-        already contains this composition in its queue, the A2 path logs
-        case="A2_dedup" instead of adding a redundant queue entry.
-        """
         if not self.use_favop or obs.fidelity == FIDELITY_HF:
             return
         if len(self.observations) < self.n_min:
@@ -815,11 +753,7 @@ class QueueScheduler3F:
 
     def _exec_batch(self, fidelity):
         queue = self.queues[fidelity]
-        # Snapshot the items to dispatch NOW. Items added during this
-        # iteration (e.g. a FAVP verification-repeat enqueued in response
-        # to a flag on a fresh observation in the same batch) remain in
-        # the queue for the NEXT dispatch, preserving the "defer to next
-        # MF dispatch" semantic of Supplementary Algorithm 2.
+
         to_dispatch = list(queue)
         q  = len(to_dispatch)
         bc = self.cost_model.batch_cost(q, fidelity)
@@ -996,9 +930,9 @@ class QueueScheduler3F:
         return self.log
 
 
-# =====================================================================
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Standard MF-MES Baseline
-# =====================================================================
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 class StandardMFMES3F:
     def __init__(self, lookup, cost_model, seed=0, init_data=None):
@@ -1137,9 +1071,9 @@ class StandardMFMES3F:
         return self.log
 
 
-# =====================================================================
+# ===============
 # Experiment Runner
-# =====================================================================
+# ===================
 
 def run_p3ht_benchmark(filepath, budget=250.0, n_seeds=10, verbose=True,
                        n_init_lf=5, n_init_mf=3, n_init_hf=2,
@@ -1201,9 +1135,9 @@ def run_p3ht_benchmark(filepath, budget=250.0, n_seeds=10, verbose=True,
     return results, all_favop, lookup
 
 
-# =====================================================================
+# =====================================
 # Plotting & Summary
-# =====================================================================
+# =================================
 
 def plot_p3ht_results(results, lookup, budget=250, save_path=None):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))

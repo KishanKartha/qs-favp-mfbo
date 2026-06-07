@@ -1,15 +1,6 @@
 """
-P3HT-CNT benchmark figure (Section 1.2): Regret vs Cost + Facility Sessions.
+P3HT-CNT benchmark figure: Regret vs Cost + Facility Sessions.
 
-Updated for the results pickle (corrected M-fidelity FAVP, piecewise
-queue-aware cost, realistic shared-facility overheads):
-    * lambda_o_mf = 6.0,  lambda_mar_mf = 1.0
-    * lambda_o_hf = 8.0,  lambda_mar_hf = 1.0
-    * Budget = 250
-
-Font: Liberation Sans (metric-compatible with Arial, which Nature requires
-for figures). Falls back to Arial / DejaVu Sans if Liberation Sans is not
-installed on the system running the script.
 """
 
 import sys, pickle, io
@@ -129,21 +120,7 @@ DISPLAY_METHOD_NAMES = {
 
 def build_regret_curves(results, methods, n_grid=300, cost_min=25, cost_max=270,
                          log_floor=1e-3):
-    """
-    For each method return arrays (cost_grid, median, lo, hi)
-    where lo/hi are the 25th/75th percentile bands.
-    Each run is interpolated onto a common cost grid.
 
-    Cost range starts at 25 because that is the shared initialisation cost
-    under the benchmark cost model (5*1 LF + 3*(6+1) MF + 2*(8+1) HF, with floors
-    on marginal costs); see Supplementary Note 2.
-
-    Zero regrets are clamped to ``log_floor`` (default 1e-3) rather than NaN,
-    so seeds that reach the optimum stay in the median/IQR calculation
-    instead of dropping out. The floor is well below the smallest non-zero
-    regret in the dataset (~0.06) so it does not perturb the visible
-    medians or bands.
-    """
     cost_grid = np.linspace(cost_min, cost_max, n_grid)
     out = {}
     for m in methods:
@@ -172,10 +149,7 @@ def build_regret_curves(results, methods, n_grid=300, cost_min=25, cost_max=270,
 # ── 5. Helper: compute session counts ────────────────────────────────────────
 
 def compute_sessions(results, methods, fidelities):
-    """
-    Returns dict  method → fidelity_label → (mean, std)
-    counting total sessions per run from n_sessions at the *last* iteration.
-    """
+
     out = {}
     for m in methods:
         out[m] = {}
@@ -195,11 +169,7 @@ def final_regrets(results, method):
 
 
 def build_per_seed_trajectories(results, method, cost_grid, log_floor=1e-3):
-    """Return a (n_seeds, n_cost_grid) array of per-seed regret trajectories
-    interpolated onto the shared cost grid. Same per-seed processing as
-    ``build_regret_curves`` (running min, log-floor clamp, step interpolation),
-    but exposes the individual trajectories instead of aggregating them.
-    """
+
     runs = results[method]
     out = []
     for run in runs:
@@ -215,19 +185,14 @@ def build_per_seed_trajectories(results, method, cost_grid, log_floor=1e-3):
 
 # ── 7. Build data ────────────────────────────────────────────────────────────
 COST_MAX  = 270   # budget=250 plus flush overhead
-# Lower clamp for zero regrets, used both for the aggregate median/IQR
-# computation and for the per-seed underlay. Set to the visible y-axis
-# floor so seeds reaching zero (seed 7) sit at the bottom of the plot
-# rather than being clipped off-screen.
+
 LOG_FLOOR = 0.04
 
 curves   = build_regret_curves(results, METHODS, cost_min=25, cost_max=COST_MAX,
                                 log_floor=LOG_FLOOR)
 sessions = compute_sessions(results, METHODS, FIDELITIES)
 
-# Per-seed FAVP trajectories on the shared cost grid (used as faint underlay
-# in Panel A so the heavy-tailed seed-to-seed structure is visible directly,
-# rather than implied by the IQR band alone).
+
 favp_grid = curves["QS-MFBO+FAVOP"][0]
 favp_per_seed = build_per_seed_trajectories(results, "QS-MFBO+FAVOP",
                                              favp_grid, log_floor=LOG_FLOOR)
@@ -261,10 +226,7 @@ for m in ("QS-MFBO", "MF-MES"):
     ax.fill_between(cost_grid, lo, hi,
                     color=s["color"], alpha=FILL_ALPHA, zorder=s["zorder"] - 1)
 
-# Plot QS-MFBO+FAVP with per-seed faint trajectories under a bold median line.
-# This makes the heavy-tailed seed-to-seed structure visible directly: half
-# the seeds drop sharply by mid-campaign, half remain elevated, and the
-# median summarises that distribution.
+
 favp_style = PALETTE["QS-MFBO+FAVOP"]
 for s_idx in range(favp_per_seed.shape[0]):
     ax.plot(favp_grid, favp_per_seed[s_idx, :],
@@ -294,9 +256,7 @@ ax.grid(which="minor", linewidth=0.2, alpha=0.25)
 ax.text(-0.12, 1.04, "a", transform=ax.transAxes,
         fontsize=10, va="top", fontweight="bold")
 
-# annotation: median final regret for QS-MFBO+FAVP
-# place it near the right end of the median curve, in the white space
-# between the converged seeds (~0.06) and the elevated seeds (~1.5)
+
 favp_color = PALETTE["QS-MFBO+FAVOP"]["color"]
 final_x = COST_MAX
 ax.annotate(f"median = {favp_median:.2f}",
@@ -347,7 +307,7 @@ ax2.grid(axis="x", visible=False)
 ax2.text(-0.18, 1.04, "b", transform=ax2.transAxes,
          fontsize=10, va="top", fontweight="bold")
 
-# ── 9. Shared horizontal legend below both panels ────────────────────────────
+# ── 9. Shared horizontal legend below both panels 
 legend_elements = [
     Line2D([0], [0], color=PALETTE[m]["color"],
            ls=PALETTE[m]["ls"], lw=PALETTE[m]["lw"],
@@ -367,7 +327,7 @@ fig.legend(legend_elements, [h.get_label() for h in legend_elements],
 plt.tight_layout()
 plt.subplots_adjust(bottom=0.18, wspace=0.38)
 
-# ── 10. Save ─────────────────────────────────────────────────────────────────
+# ── 10. Save
 PDF_NAME = "p3ht_cnt_benchmark.pdf"
 PNG_NAME = "p3ht_cnt_benchmark.png"
 
@@ -375,3 +335,5 @@ fig.savefig(PDF_NAME, format="pdf")
 fig.savefig(PNG_NAME, format="png", dpi=300)
 print(f"Saved  {PDF_NAME}  and  {PNG_NAME}")
 plt.show()
+
+#this is googlecolab code

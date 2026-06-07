@@ -2,7 +2,7 @@
 Core QS-MFBO framework (two-fidelity implementation).
 
 This module defines the queue-scheduled multi-fidelity Bayesian optimisation
-layer used in Section 2.1 of the paper and Supplementary Note 4. It contains:
+layer. It contains:
 
   - QueueScheduler          the scheduling meta-layer wrapping MF-MES
   - StandardMFMES           the unaugmented baseline (immediate execution)
@@ -12,13 +12,9 @@ layer used in Section 2.1 of the paper and Supplementary Note 4. It contains:
 
 The FAVP verification layer is kept separate in qsmfbo.favp. The three-fidelity
 P3HT-CNT benchmark is also a separate module (benchmarks/p3ht_cnt/) because it
-predates the refactor and remains self-contained so that the published numbers
-for Section 2.2 remain bit-for-bit reproducible.
+predates the refactor and remains self-contained.
 
-Reference:
-    Kartha, K. & James, A. P. Cost-aware multi-fidelity scheduling and
-    cross-fidelity anomaly resolution for iterative learning under
-    laboratory constraints. (2026)
+
 """
 
 import torch

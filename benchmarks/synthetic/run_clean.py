@@ -1,23 +1,6 @@
 """
 Clean-condition synthetic benchmark.
 
-Reproduces:
-  - Table 1 (main text, Section 2.1)
-  - Extended Data Fig. 1 (per-function convergence trajectories)
-
-Compares MF-MES against QS-MFBO on three test functions (Styblinski-Tang 2D,
-Branin 2D, Hartmann 6D) across two overhead regimes (lambda_o = 25 and 15).
-Ten seeds per configuration, budget 200 cost units, shared initialisation.
-
-Usage:
-    python run_clean.py                 # run all six configurations
-    python run_clean.py --function st2d # run one function only
-    python run_clean.py --n_seeds 3     # quick smoke test
-
-Output:
-    results/clean_<fn>_ov<lambda_o>.pkl     per-configuration results
-    results/clean_<fn>_ov<lambda_o>.png     three-panel diagnostic plot
-    results/clean_summary.txt               table of final regret and sessions
 """
 
 import argparse

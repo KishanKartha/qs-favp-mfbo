@@ -1,22 +1,6 @@
 """
 Overhead-sensitivity sweep on Styblinski-Tang 2D.
 
-Reproduces:
-  - Supplementary Note 4, Supplementary Table 2
-  - Supplementary Note 4, Supplementary Figure 3
-
-Sweeps lambda_o in {5, 10, 15, 25, 45} at fixed lambda_m = 2 and budget 200,
-comparing MFBO (baseline) against QS-MFBO (full framework) across 10 seeds
-per overhead value.
-
-Usage:
-    python run_overhead_sweep.py
-    python run_overhead_sweep.py --n_seeds 3   # quick smoke test
-
-Output:
-    results/overhead_sweep.pkl
-    results/overhead_sweep.png      (final regret vs lambda_o)
-    results/overhead_summary.txt
 """
 
 import argparse
