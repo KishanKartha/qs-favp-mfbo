@@ -6,20 +6,14 @@
 Python 3.9 or newer. From a fresh virtual environment:
 
 ```bash
-git clone <this repo url>
+#git clone <this repo url> # the code will be released in the github post acceptance.
 cd qs-favp-mfbo
 pip install -e .
 ```
 
-This installs the `qsmfbo` package and pulls in botorch, gpytorch, and the
-usual numerical/plotting stack. A CUDA-capable GPU is not required but will
-make things considerably faster; the benchmarks auto-detect it and print
-`Using GPU` or `Using CPU` on import.
-
 ## Quickstart
 
-The fastest way to check everything is working end-to-end is the
-catastrophic-noise benchmark on the two-dimensional Styblinski-Tang
+The fastest way to check everything is working end-to-end is by running the catastrophic-noise benchmark on the two-dimensional Styblinski-Tang
 function with three seeds (a few minutes on GPU, longer on CPU):
 
 ```bash
@@ -27,34 +21,16 @@ cd benchmarks/synthetic
 python run_catastrophic.py --function st2d --n_seeds 3
 ```
 
-Output lands in `benchmarks/synthetic/results/`: a pickle with per-seed
-logs, a three-panel PNG, and a text summary. Numbers will not match the
-paper exactly at three seeds, but the method ordering (FAVP < no-FAVP <
-naive) should already be visible.
+Output lands in the `benchmarks/synthetic/results/`: a pickle with per-seed logs, a three-panel PNG, and a text summary. Numbers will not match the
+paper exactly at three seeds, but the method ordering (FAVP < no-FAVP < naive) should already be observable.
 
 ## What reproduces what
 
-All paper numbers come from the scripts in `benchmarks/`. Defaults are set
-to the values used in the paper, so no arguments are needed for a faithful
+All paper numbers come from the scripts in `benchmarks/`. Defaults are set to the values used in the paper, so no arguments are needed for a faithful
 reproduction.
 
-| Paper artefact | Script |
-|---|---|
-| Table 1 | `benchmarks/synthetic/run_clean.py` |
-| Figure 2 | `benchmarks/synthetic/run_catastrophic.py` |
-| Figure 3 | `benchmarks/p3ht_cnt/run_benchmark.py` |
-| Extended Data Fig. 1 | `benchmarks/synthetic/run_clean.py` |
-| Extended Data Fig. 2 | `benchmarks/p3ht_cnt/run_benchmark.py` |
-| Extended Data Fig. 3 | `benchmarks/p3ht_cnt/run_benchmark.py` |
-| Extended Data Table 1 | `benchmarks/synthetic/run_catastrophic.py` |
-| Supp. Figs. 1, 2 | `benchmarks/synthetic/run_favp_sensitivity.py` |
-| Supp. Fig. 3 | `benchmarks/synthetic/run_overhead_sweep.py` |
-| Supp. Table 1 | `benchmarks/synthetic/run_ablation.py` |
-| Supp. Table 2 | `benchmarks/synthetic/run_overhead_sweep.py` |
 
-See `benchmarks/synthetic/README.md` and `benchmarks/p3ht_cnt/README.md` for
-runtime estimates, CLI options, and output layout for each script. The
-P3HT-CNT benchmark needs the Bash et al. dataset, which is not redistributed
+See `benchmarks/synthetic/README.md` and `benchmarks/p3ht_cnt/README.md`. TheP3HT-CNT benchmark needs the Bash et al. dataset, which is not redistributed
 here; that README has the link.
 
 ## Layout
@@ -71,31 +47,5 @@ benchmarks/
 The package `qsmfbo` contains the general two-fidelity framework. The
 three-fidelity P3HT benchmark is intentionally kept as a separate standalone
 module under `benchmarks/p3ht_cnt/`  it is the same code that produced the
-numbers in Section 2.2 of the paper, preserved so the results reproduce
-exactly.
+numbers in the paper, preserved so the results reproduceexactly.
 
-## Reproducibility notes
-
-Ten-seed runs are not short. Rough wall-clock times on a single RTX 5000:
-
-- clean-condition synthetic benchmark: 6–8 h
-- catastrophic-noise synthetic benchmark: 12–16 h
-- P3HT-CNT three-fidelity benchmark: 8–14 h
-- FAVP sensitivity sweep (200 cells, 5 seeds each): 12–16 h
-
-On CPU these run roughly an order of magnitude slower. If you want to
-sanity-check a runner without waiting, every script accepts `--n_seeds 2` or
-`--n_seeds 3`.
-
-Every runner writes its output under `results/` in its own folder. Re-runs
-overwrite. Pickles include all per-seed logs and diagnostics, so plots and
-tables can be regenerated from a single finished run.
-
-## Citation
-
-If you use this code, please cite the repo and paper:
-
-
-## Licence
-
-MIT. See [LICENSE](LICENSE).
