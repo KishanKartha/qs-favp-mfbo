@@ -6,7 +6,7 @@
 Python 3.9 or newer. From a fresh virtual environment:
 
 ```bash
-#git clone <this repo url> # the code will be released in the github post acceptance.
+#git clone <this repo url> 
 cd qs-favp-mfbo
 pip install -e .
 ```
