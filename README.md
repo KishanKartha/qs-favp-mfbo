@@ -37,11 +37,11 @@ here; that README has the link.
 
 ```
 qsmfbo/
-    core.py         queue-scheduling framework and the MF-MES baseline
-    favp.py         FAVP protocol and the catastrophic-noise benchmark
+core.py         queue-scheduling framework and the MF-MES baseline
+favp.py         FAVP protocol and the catastrophic-noise benchmark
 benchmarks/
-    synthetic/      five runners for the synthetic experiments
-    p3ht_cnt/       three-fidelity benchmark and its runner
+synthetic/      five runners for the synthetic experiments
+p3ht_cnt/       three-fidelity benchmark and its runner
 ```
 
 The package `qsmfbo` contains the general two-fidelity framework. The
