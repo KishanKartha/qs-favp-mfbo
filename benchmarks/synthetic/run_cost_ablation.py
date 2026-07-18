@@ -1,10 +1,6 @@
 """
 run_cost_ablation.py
 
-Cost-model ablation for Reviewer 1, Comment 2.
-Three per-sample cost models, identical batch_cost (actual expenditure).
-Only the decision quantity fed to the acquisition differs.
-
 Run from the outer qsmfbo folder:
     python run_cost_ablation.py --function st2d --seeds 10
 """

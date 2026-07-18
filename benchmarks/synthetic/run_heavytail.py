@@ -1,16 +1,6 @@
 """
 Run 3: heavy-tailed observation noise on Hartmann-6D.
 
-Cheap-fidelity observations carry Student-t(nu=3) noise instead of the
-usual Gaussian noise. NO catastrophic outlier injection. Five methods,
-10 seeds:
-  QS-MFBO + FAVP, QS-MFBO (no FAVP), Robust MFBO, MF-MES,
-  Stacked (FAVP + robust).
-
-Expected story: robust filtering handles diffuse heavy-tailed corruption
-well; FAVP alone is weakest (few discrete flaggable outliers); the
-stacked variant is best, motivating the stack.
-
 Checkpointed per seed. Resumable.
 
 Usage:
