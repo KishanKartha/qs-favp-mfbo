@@ -14,11 +14,14 @@ The FAVP verification layer is kept separate in qsmfbo.favp. The three-fidelity
 P3HT-CNT benchmark is also a separate module (benchmarks/p3ht_cnt/) because it
 predates the refactor and remains self-contained.
 
-
+Timing instrumentation: QueueScheduler and StandardMFMES record wall-clock
+timings for model fits and queue valuations in self.timing_log, for the
+computational-overhead analysis (each entry: iteration, op, q, n_obs, seconds).
 """
 
 import torch
 import numpy as np
+import time
 import warnings
 from typing import List, Optional
 from dataclasses import dataclass
@@ -312,6 +315,10 @@ class QueueScheduler:
       3. Information-theoretic batch trigger
 
     Ablation flags: use_queue_cost, use_adaptive_trigger
+
+    Timing: self.timing_log records wall-clock seconds for 'model_fit' and
+    'queue_valuation' operations, with queue size q and observation count
+    n_obs at the time of the call.
     """
     def __init__(self, test_function, cost_model, noise_std=0.1, q_min=2, q_max=20,
                  n_init_cheap=3, n_init_expensive=2, seed=0, init_data=None,
@@ -338,6 +345,7 @@ class QueueScheduler:
         self.observations = []
         self.queue = []
         self.log = []
+        self.timing_log = []
         self.iteration = 0
         self.cumulative_cost = 0.0
         self.n_facility_visits = 0
@@ -369,11 +377,17 @@ class QueueScheduler:
         return self.test_fn.optimal_value - self._best_observed_hf()
 
     def _fit_model(self):
+        t0 = time.time()
         train_X, train_Y = self._get_train_tensors()
         if train_X is None or train_X.shape[0] < 3:
             return False
         try:
             self.model = build_mf_model(train_X, train_Y, self.fidelity_dim)
+            self.timing_log.append({'iteration': self.iteration,
+                                    'op': 'model_fit',
+                                    'q': len(self.queue),
+                                    'n_obs': train_X.shape[0],
+                                    'seconds': time.time() - t0})
             return True
         except Exception as e:
             print("  [WARN] Model fit failed: %s" % e)
@@ -400,6 +414,7 @@ class QueueScheduler:
 
     def _greedy_queue_valuation(self):
         """Contribution 2: Greedy sequential fantasisation."""
+        t0 = time.time()
         if not self.queue:
             return 0.0
         q = len(self.queue)
@@ -431,6 +446,11 @@ class QueueScheduler:
                     current_model = build_mf_model(acc_X, acc_Y, self.fidelity_dim)
                 except Exception:
                     break
+        self.timing_log.append({'iteration': self.iteration,
+                                'op': 'queue_valuation',
+                                'q': q,
+                                'n_obs': len(self.observations),
+                                'seconds': time.time() - t0})
         return G_hat
 
     def _initialize(self, init_cost=None):
@@ -588,6 +608,7 @@ class StandardMFMES:
         self.target_fidelities = {self.fidelity_dim: 1.0}
         self.observations = []
         self.log = []
+        self.timing_log = []
         self.iteration = 0
         self.cumulative_cost = 0.0
         self.n_facility_visits = 0
@@ -610,11 +631,17 @@ class StandardMFMES:
         return self.test_fn.optimal_value - self._best_observed_hf()
 
     def _fit_model(self):
+        t0 = time.time()
         X, Y = self._get_train_tensors()
         if X is None or X.shape[0] < 3:
             return False
         try:
             self.model = build_mf_model(X, Y, self.fidelity_dim)
+            self.timing_log.append({'iteration': self.iteration,
+                                    'op': 'model_fit',
+                                    'q': 0,
+                                    'n_obs': X.shape[0],
+                                    'seconds': time.time() - t0})
             return True
         except Exception:
             return False
